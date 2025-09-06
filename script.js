@@ -126,6 +126,51 @@ function signOut() {
 let CURRENT_FILTER = 'all';
 let ALL_TASKS = [];
 
+// Modal HTML (inserted once)
+function ensureEditModal() {
+  if ($('#editModal').length) return;
+  const modal = $(`
+    <div id="editModal" class="modal hidden">
+      <div class="modal-content">
+        <h3 class="title">Edit Task</h3>
+        <div class="field"><label>Title</label><input id="editTitle" class="input" type="text"></div>
+        <div class="field"><label>Description</label><input id="editDesc" class="input" type="text"></div>
+        <div class="row" style="margin-top:16px; gap:10px; justify-content:flex-end">
+          <button id="editCancel" class="btn btn-ghost">Cancel</button>
+          <button id="editSave" class="btn btn-primary">Save</button>
+        </div>
+      </div>
+    </div>
+  `);
+  $('body').append(modal);
+  // Modal close logic
+  $('#editCancel').on('click', hideEditModal);
+  $('#editModal').on('click', function(e) {
+    if (e.target === this) hideEditModal();
+  });
+}
+
+function showEditModal(task, onSave) {
+  console.log('showEditModal called', task);
+  ensureEditModal();
+  $('#editTitle').val(task[FIELD.title]);
+  $('#editDesc').val(task[FIELD.description]);
+  $('#editModal').removeClass('hidden');
+  // Remove previous handler
+  $('#editSave').off('click');
+  $('#editSave').on('click', function() {
+    const newTitle = $('#editTitle').val().trim();
+    const newDesc = $('#editDesc').val().trim();
+    if (!newTitle) return showToast('Title required');
+    hideEditModal();
+    onSave(newTitle, newDesc);
+  });
+}
+
+function hideEditModal() {
+  $('#editModal').addClass('hidden');
+}
+
 function render() {
   let items = [...ALL_TASKS];
 
@@ -187,15 +232,13 @@ function render() {
       }
     });
 
-    // Edit button
-    $item.find('.btn-edit').on('click', async function() {
-      const newTitle = prompt("New title:", t[FIELD.title]);
-      const newDesc = prompt("New description:", t[FIELD.description]);
-      if (newTitle !== null && newDesc !== null) {
+    // Edit button (show modal)
+    $item.find('.btn-edit').on('click', function() {
+      showEditModal(t, async (newTitle, newDesc) => {
         await updateTask(id, { [FIELD.title]: newTitle, [FIELD.description]: newDesc });
         showToast("Task updated");
         loadTasks();
-      }
+      });
     });
 
     // Delete button
