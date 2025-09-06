@@ -162,7 +162,7 @@ function render() {
 
     const $item = $(`
       <div class="task" data-id="${id}">
-        <input type="checkbox" class="status-toggle" ${isActive ? '' : 'checked'} />
+        <input type="checkbox" class="status-toggle" ${isActive ? 'checked' : ''} />
         <div class="grow">
           <div class="title">${escapeHtml(t[FIELD.title] || 'Untitled')}</div>
           <div class="meta">${escapeHtml(t[FIELD.description] || '')}
@@ -175,14 +175,14 @@ function render() {
         </div>
       </div>`);
 
-    // Status toggle (Note: API uses 'inactive' for done, so checkbox logic is reversed)
+    // Status toggle: checked means active, unchecked means inactive
     $item.find('.status-toggle').on('change', async function() {
       try {
-        await changeStatus(id, this.checked ? 'inactive' : 'active');
+        await changeStatus(id, this.checked ? 'active' : 'inactive');
         showToast('Status updated');
-        loadTasks(); // Reload all tasks to reflect change
+        loadTasks();
       } catch {
-        this.checked = !this.checked; // Revert on failure
+        this.checked = !this.checked;
         showToast('Failed to update status');
       }
     });
