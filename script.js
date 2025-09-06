@@ -64,7 +64,18 @@ function apiCall(key, {id, query, body}={}) {
     method,
     data: requestData,
     headers, // empty
-    contentType: "application/x-www-form-urlencoded", // ✅ this is allowed
+    contentType: "application/x-www-form-urlencoded",
+    dataType: 'json', // Force JSON parsing
+  }).fail(function(xhr, status, error) {
+    // If JSON parsing fails, try to parse manually
+    if (xhr.responseText) {
+      try {
+        const parsed = JSON.parse(xhr.responseText);
+        return $.Deferred().resolve(parsed);
+      } catch (e) {
+        console.error('Failed to parse API response:', xhr.responseText);
+      }
+    }
   });
 }
 
@@ -100,13 +111,20 @@ function render(){
   console.log('Rendering tasks, ALL_TASKS:', ALL_TASKS);
   console.log('Current filter:', CURRENT_FILTER);
   
-  let items = ALL_TASKS;
+  let items = [...ALL_TASKS]; // Make a copy
 
+  // ✅ TEMPORARILY BYPASS FILTERS FOR DEBUGGING
+  console.log('Items before filtering:', items);
+  
   // ✅ Filter correctly using "active" / "inactive"
-  if (CURRENT_FILTER === 'active') items = items.filter(t => t[FIELD.isActive] === 'active');
-  if (CURRENT_FILTER === 'inactive') items = items.filter(t => t[FIELD.isActive] === 'inactive');
-
-  console.log('Items after filter:', items);
+  if (CURRENT_FILTER === 'active') {
+    items = items.filter(t => t[FIELD.isActive] === 'active');
+    console.log('Items after active filter:', items);
+  }
+  if (CURRENT_FILTER === 'inactive') {
+    items = items.filter(t => t[FIELD.isActive] === 'inactive');
+    console.log('Items after inactive filter:', items);
+  }
 
   // ✅ Search filter
   const q = $('#search').val()?.toLowerCase()?.trim();
@@ -120,23 +138,39 @@ function render(){
   console.log('Items after search:', items);
 
   const $list = $('#list').empty();
-  if (items.length === 0) { 
-    console.log('No items to display, showing empty message');
+  
+  // SHOW ALL TASKS FOR DEBUG - temporarily bypass the empty check
+  if (ALL_TASKS.length === 0) {
+    console.log('No tasks in ALL_TASKS, showing empty message');
     $('#empty').removeClass('hidden'); 
     return; 
   }
+  
+  if (items.length === 0) { 
+    console.log('No items after filtering, but ALL_TASKS has', ALL_TASKS.length, 'tasks');
+    console.log('Filter issue detected! Showing debug message...');
+    $('#empty').removeClass('hidden');
+    $('#empty').text(`Debug: ${ALL_TASKS.length} tasks loaded, but 0 match filter "${CURRENT_FILTER}"`);
+    return; 
+  }
+  
   $('#empty').addClass('hidden');
 
   console.log('Rendering', items.length, 'items');
 
-  items.forEach(t => {
+  items.forEach((t, index) => {
     const id = t[FIELD.id];
-    const isActive = t[FIELD.isActive] === 'active'; // ✅ fix here
+    const isActive = t[FIELD.isActive] === 'active';
 
-    console.log('Rendering task:', { id, title: t[FIELD.title], status: t[FIELD.isActive] });
+    console.log(`Rendering task ${index}:`, { 
+      id, 
+      title: t[FIELD.title], 
+      status: t[FIELD.isActive],
+      fullTask: t 
+    });
 
     const $item = $(`
-      <div class="task" data-id="${id}">
+      <div class="task" data-id="${id}" style="border: 1px solid #ccc; padding: 10px; margin: 5px;">
         <input type="checkbox" class="status-toggle" ${isActive ? 'checked' : ''} />
         <div class="grow">
           <div class="title">${escapeHtml(t[FIELD.title] || 'Untitled')}</div>
@@ -153,7 +187,7 @@ function render(){
     // ✅ Status toggle
     $item.find('.status-toggle').on('change', async function(){
       try {
-        await changeStatus(id, this.checked ? 'active' : 'inactive'); // ✅ API expects active/inactive
+        await changeStatus(id, this.checked ? 'active' : 'inactive');
         showToast('Status updated');
         loadTasks();
       } catch {
@@ -181,8 +215,11 @@ function render(){
       }
     });
 
+    console.log('Appending item to list:', $item[0]);
     $list.append($item);
   });
+  
+  console.log('Final #list contents:', $('#list')[0]);
 }
 
 
@@ -190,21 +227,46 @@ async function loadTasks(){
   $('#btnRefresh').prop('disabled', true);
   try {
     const userId = localStorage.getItem('user_id');
-    const res = await apiCall('list', { query: { status: 'active', user_id: userId } }); 
+    console.log('Loading tasks for user_id:', userId);
+    
+    // Based on the API testing, load with status and user_id parameters
+    const res = await apiCall('list', { query: { status: 'active', user_id: userId || 0 } }); 
     console.log("Tasks API response:", res);
+    console.log("Response type:", typeof res);
 
-    if (res.data) {
-      ALL_TASKS = Object.values(res.data); // convert object → array
+    // Handle the response - it should now be parsed JSON
+    if (res && res.data) {
+      if (Array.isArray(res.data)) {
+        ALL_TASKS = res.data;
+      } else if (typeof res.data === 'object') {
+        ALL_TASKS = Object.values(res.data);
+      } else {
+        ALL_TASKS = [];
+      }
     } else if (Array.isArray(res)) {
-      ALL_TASKS = res; // if response is directly an array
+      ALL_TASKS = res;
     } else {
       ALL_TASKS = [];
     }
 
-    console.log("ALL_TASKS after loading:", ALL_TASKS);
+    console.log("ALL_TASKS after processing:", ALL_TASKS);
+    console.log("Number of tasks loaded:", ALL_TASKS.length);
+    
+    // Log first task structure if available
+    if (ALL_TASKS.length > 0) {
+      console.log("First task structure:", ALL_TASKS[0]);
+      console.log("Task field mapping check:", {
+        id: ALL_TASKS[0][FIELD.id],
+        title: ALL_TASKS[0][FIELD.title], 
+        description: ALL_TASKS[0][FIELD.description],
+        status: ALL_TASKS[0][FIELD.isActive]
+      });
+    }
+    
     render();
   } catch (err) {
     console.error("Load tasks failed", err);
+    console.error("Error details:", err.responseText || err.message);
     showToast('Failed to load tasks');
   } finally {
     $('#btnRefresh').prop('disabled', false);
@@ -218,7 +280,7 @@ function addTask(){
   if(!title) return showToast('Enter a title');
   const $btn = $('#btnAdd'); setLoading($btn,true);
   
-  const userId = localStorage.getItem('user_id');
+  const userId = localStorage.getItem('user_id') || 0; // Use 0 as fallback
   console.log('Adding task with user_id:', userId);
   
   apiCall('create', { 
@@ -303,6 +365,10 @@ $('#btnSignIn').on('click', async function(){
       user.user_id = res.user_id;
     } else if (res.id) {
       user.user_id = res.id;
+    } else {
+      // FALLBACK: Since API doesn't return user_id, use a simple approach
+      // This is a temporary fix - in a real app, the API should return the user_id
+      user.user_id = 0; // Based on the API response, it seems tasks are stored with user_id: 0
     }
     
     console.log('User object for signin:', user);
@@ -347,3 +413,71 @@ $('#search').on('input', render);
   const who = localStorage.getItem('who');
   if(token){ $('#whoami').text(who||''); $('#authPanel').addClass('hidden'); $('#appPanel').removeClass('hidden'); $('#btnSignOut').removeClass('hidden'); loadTasks(); }
 })();
+
+// DEBUG FUNCTIONS - Add these temporarily
+window.debugTasks = function() {
+  console.log('=== TASK DEBUG INFO ===');
+  console.log('ALL_TASKS:', ALL_TASKS);
+  console.log('ALL_TASKS length:', ALL_TASKS.length);
+  console.log('CURRENT_FILTER:', CURRENT_FILTER);
+  console.log('user_id in localStorage:', localStorage.getItem('user_id'));
+  console.log('token in localStorage:', localStorage.getItem('token'));
+  console.log('#list element:', $('#list')[0]);
+  console.log('#empty element visible:', !$('#empty').hasClass('hidden'));
+  
+  // Force render without filters
+  console.log('Attempting to force render all tasks...');
+  const $list = $('#list').empty();
+  ALL_TASKS.forEach((task, index) => {
+    console.log(`Task ${index}:`, task);
+    const $testItem = $(`<div class="task">Task ${index}: ${task[FIELD.title] || 'No Title'}</div>`);
+    $list.append($testItem);
+  });
+};
+
+window.testAddTask = function() {
+  console.log('=== TESTING ADD TASK ===');
+  const userId = localStorage.getItem('user_id');
+  console.log('Using user_id:', userId);
+  
+  const testData = {
+    [FIELD.title]: 'Test Task ' + Date.now(),
+    [FIELD.description]: 'Test Description',
+    user_id: userId
+  };
+  
+  console.log('Sending data:', testData);
+  
+  return apiCall('create', { body: testData })
+    .then(res => {
+      console.log('✅ Add task success:', res);
+      return loadTasks();
+    })
+    .catch(err => {
+      console.error('❌ Add task failed:', err);
+    });
+};
+
+window.testLoadTasks = function() {
+  console.log('=== TESTING LOAD TASKS ===');
+  const userId = localStorage.getItem('user_id');
+  console.log('Current user_id:', userId);
+  
+  // Test loading tasks with different queries
+  console.log('Testing load with just user_id...');
+  return apiCall('list', { query: { user_id: userId } })
+    .then(res => {
+      console.log('✅ Load tasks (user_id only):', res);
+      return apiCall('list', { query: { status: 'active', user_id: userId } });
+    })
+    .then(res => {
+      console.log('✅ Load tasks (active + user_id):', res);
+      return apiCall('list', { query: {} }); // Try with no filters
+    })
+    .then(res => {
+      console.log('✅ Load tasks (no filters):', res);
+    })
+    .catch(err => {
+      console.error('❌ Load tasks failed:', err);
+    });
+};
