@@ -17,8 +17,8 @@ const ENDPOINT_METHODS = {
   signin: 'GET',
   list: 'GET',
   create: 'POST',
-  update: 'PUT',
-  status: 'PUT',
+  update: 'POST', // <-- change from 'PUT' to 'POST'
+  status: 'POST', // <-- change from 'PUT' to 'POST'
   remove: 'GET'
 };
 
@@ -31,7 +31,7 @@ const FIELD = {
   id: 'item_id',
   title: 'item_name',
   description: 'item_description',
-  isActive: 'status ',
+  isActive: 'status',
   createdAt: 'timemodified', // ✅ Corrected from 'createdAt' to match API response
 };
 
