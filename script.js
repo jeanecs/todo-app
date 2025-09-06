@@ -2,13 +2,24 @@
 const API_BASE = "https://todo-list.dcism.org";
 
 const ENDPOINTS = {
-  signup: `${API_BASE}/signup_action.php`,   // POST (form)
-  signin: `${API_BASE}/signin_action.php`,   // POST (form)
-  list: `${API_BASE}/getItems_action.php`,   // GET
-  create: `${API_BASE}/addItem_action.php`,  // POST
-  update: `${API_BASE}/editItem_action.php`, // POST/PUT
-  status: `${API_BASE}/statusItem_action.php`, // POST/PUT
-  remove: `${API_BASE}/deleteItem_action.php` // POST/DELETE
+  signup: `${API_BASE}/signup_action.php`,
+  signin: `${API_BASE}/signin_action.php`,
+  list: `${API_BASE}/getItems_action.php`,
+  create: `${API_BASE}/addItem_action.php`,
+  update: `${API_BASE}/editItem_action.php`,
+  status: `${API_BASE}/statusItem_action.php`,
+  remove: `${API_BASE}/deleteItem_action.php`
+};
+
+// ✅ HELPER to define the correct HTTP method for each endpoint
+const ENDPOINT_METHODS = {
+  signup: 'POST',
+  signin: 'GET',
+  list: 'GET',
+  create: 'POST',
+  update: 'PUT',
+  status: 'PUT',
+  remove: 'GET'
 };
 
 const FIELD = {
@@ -20,113 +31,113 @@ const FIELD = {
   id: 'item_id',
   title: 'item_name',
   description: 'item_description',
-  isActive: 'status',
-  createdAt: 'createdAt',
+  isActive: 'status ',
+  createdAt: 'timemodified', // ✅ Corrected from 'createdAt' to match API response
 };
 
-function authHeader(){
-  return {}; // no Authorization header at all
-}
-
 /******************** UTILITIES ************************/
-function showToast(msg){
+function showToast(msg) {
   const $t = $('#toast');
   $t.text(msg).fadeIn(150);
   setTimeout(() => $t.fadeOut(200), 1800);
 }
-function setLoading($btn, loading){
-  if(!$btn) return;
-  if(loading){ $btn.data('orig',$btn.text()).prop('disabled',true).text('Please wait…'); }
-  else { $btn.prop('disabled',false).text($btn.data('orig')); }
+
+function setLoading($btn, loading) {
+  if (!$btn) return;
+  if (loading) {
+    $btn.data('orig', $btn.text()).prop('disabled', true).text('Please wait…');
+  } else {
+    $btn.prop('disabled', false).text($btn.data('orig'));
+  }
 }
-function fmtDate(s){ try { return new Date(s).toLocaleString(); } catch(e){ return s } }
 
-function apiCall(key, {id, query, body}={}) {
-  let url = ENDPOINTS[key];
-  if (!url) throw new Error("Unknown endpoint: " + key);
-
-  if (query) {
-    const qs = new URLSearchParams(query).toString();
-    url += (url.includes("?") ? "&" : "?") + qs;
+function fmtDate(s) {
+  try {
+    return new Date(s).toLocaleString();
+  } catch (e) {
+    return s
   }
+}
 
-  let method = "POST";
-  let requestData = null;
-  let headers = {}; // no custom headers
+// ✅ REWRITTEN to handle different methods and data formats correctly
+// ✅ REWRITTEN to handle different methods and the server's CORS rules
+// ✅ FINAL VERSION to work around server misconfiguration
+function apiCall(key, { query, body } = {}) {
+    let url = ENDPOINTS[key];
+    if (!url) throw new Error("Unknown endpoint: " + key);
 
-  if (body) {
-    // Always send as form-urlencoded
-    requestData = new URLSearchParams(body).toString();
-  }
+    const method = ENDPOINT_METHODS[key] || 'GET';
 
-  return $.ajax({
-    url,
-    method,
-    data: requestData,
-    headers, // empty
-    contentType: "application/x-www-form-urlencoded",
-    dataType: 'json', // Force JSON parsing
-  }).fail(function(xhr, status, error) {
-    // If JSON parsing fails, try to parse manually
-    if (xhr.responseText) {
-      try {
-        const parsed = JSON.parse(xhr.responseText);
-        return $.Deferred().resolve(parsed);
-      } catch (e) {
-        console.error('Failed to parse API response:', xhr.responseText);
-      }
+    const ajaxOptions = {
+        url,
+        method,
+        dataType: 'json',
+    };
+
+    // For GET or DELETE, data goes in the URL
+    if ((method === 'GET' || method === 'DELETE') && query) {
+        ajaxOptions.data = query;
     }
-  });
-}
+    
+    // For POST or PUT, we send a RAW JSON string but lie about the content type
+    // to bypass the server's broken CORS rules.
+    if ((method === 'POST' || method === 'PUT') && body) {
+        ajaxOptions.data = JSON.stringify(body); // Convert the object to a string
+        ajaxOptions.contentType = 'text/plain';  // ✅ THE FIX: Label it as plain text
+    }
 
+    return $.ajax(ajaxOptions)
+        .fail(function(xhr, textStatus, errorThrown) {
+            // This detailed error logging is very helpful
+            console.error("API Call Failed:", key);
+            console.error("Status:", xhr.status, `(${textStatus})`);
+            console.error("Error Thrown:", errorThrown);
+            console.error("Response Text:", xhr.responseText);
+        });
+}
 
 /******************** AUTH ************************/
-function onSignedIn(user, token){
-  if(token) localStorage.setItem('token', token);
-  if(user?.[FIELD.email]) localStorage.setItem('who', user[FIELD.email]);
-  if(user?.id || user?.[FIELD.id] || user?.user_id){
-    localStorage.setItem('user_id', user.id || user[FIELD.id] || user.user_id);
+// ✅ UPDATED to handle API response correctly
+function onSignedIn(user) {
+  // The API returns the user object directly, which has an 'id' property
+  if (user && user.id) {
+    localStorage.setItem('user_id', user.id);
+    localStorage.setItem('who', user.email);
+    $('#whoami').text(user.email);
+    $('#authPanel').addClass('hidden');
+    $('#appPanel').removeClass('hidden');
+    $('#btnSignOut').removeClass('hidden');
+    loadTasks();
   }
-  $('#whoami').text(localStorage.getItem('who') || '');
-  $('#authPanel').addClass('hidden');
-  $('#appPanel').removeClass('hidden');
-  $('#btnSignOut').removeClass('hidden');
-  loadTasks();
 }
 
-function signOut(){
-  localStorage.removeItem('token');
+function signOut() {
+  localStorage.removeItem('user_id');
   localStorage.removeItem('who');
   $('#appPanel').addClass('hidden');
   $('#btnSignOut').addClass('hidden');
   $('#authPanel').removeClass('hidden');
   $('#whoami').text('');
+  $('#list').empty(); // Clear the list on sign out
+  ALL_TASKS = [];
 }
 
 /******************** TASKS ************************/
 let CURRENT_FILTER = 'all';
 let ALL_TASKS = [];
 
-function render(){
-  console.log('Rendering tasks, ALL_TASKS:', ALL_TASKS);
-  console.log('Current filter:', CURRENT_FILTER);
-  
-  let items = [...ALL_TASKS]; // Make a copy
+function render() {
+  let items = [...ALL_TASKS];
 
-  // ✅ TEMPORARILY BYPASS FILTERS FOR DEBUGGING
-  console.log('Items before filtering:', items);
-  
-  // ✅ Filter correctly using "active" / "inactive"
+  // Filter by status
   if (CURRENT_FILTER === 'active') {
     items = items.filter(t => t[FIELD.isActive] === 'active');
-    console.log('Items after active filter:', items);
   }
   if (CURRENT_FILTER === 'inactive') {
     items = items.filter(t => t[FIELD.isActive] === 'inactive');
-    console.log('Items after inactive filter:', items);
   }
 
-  // ✅ Search filter
+  // Filter by search query
   const q = $('#search').val()?.toLowerCase()?.trim();
   if (q) {
     items = items.filter(t =>
@@ -135,43 +146,23 @@ function render(){
     );
   }
 
-  console.log('Items after search:', items);
-
   const $list = $('#list').empty();
-  
-  // SHOW ALL TASKS FOR DEBUG - temporarily bypass the empty check
-  if (ALL_TASKS.length === 0) {
-    console.log('No tasks in ALL_TASKS, showing empty message');
-    $('#empty').removeClass('hidden'); 
-    return; 
-  }
-  
-  if (items.length === 0) { 
-    console.log('No items after filtering, but ALL_TASKS has', ALL_TASKS.length, 'tasks');
-    console.log('Filter issue detected! Showing debug message...');
+
+  if (items.length === 0) {
     $('#empty').removeClass('hidden');
-    $('#empty').text(`Debug: ${ALL_TASKS.length} tasks loaded, but 0 match filter "${CURRENT_FILTER}"`);
-    return; 
+    $('#empty').text('No tasks found. Create one above ✨');
+    return;
   }
-  
+
   $('#empty').addClass('hidden');
 
-  console.log('Rendering', items.length, 'items');
-
-  items.forEach((t, index) => {
+  items.forEach(t => {
     const id = t[FIELD.id];
     const isActive = t[FIELD.isActive] === 'active';
 
-    console.log(`Rendering task ${index}:`, { 
-      id, 
-      title: t[FIELD.title], 
-      status: t[FIELD.isActive],
-      fullTask: t 
-    });
-
     const $item = $(`
-      <div class="task" data-id="${id}" style="border: 1px solid #ccc; padding: 10px; margin: 5px;">
-        <input type="checkbox" class="status-toggle" ${isActive ? 'checked' : ''} />
+      <div class="task" data-id="${id}">
+        <input type="checkbox" class="status-toggle" ${isActive ? '' : 'checked'} />
         <div class="grow">
           <div class="title">${escapeHtml(t[FIELD.title] || 'Untitled')}</div>
           <div class="meta">${escapeHtml(t[FIELD.description] || '')}
@@ -184,30 +175,31 @@ function render(){
         </div>
       </div>`);
 
-    // ✅ Status toggle
-    $item.find('.status-toggle').on('change', async function(){
+    // Status toggle (Note: API uses 'inactive' for done, so checkbox logic is reversed)
+    $item.find('.status-toggle').on('change', async function() {
       try {
-        await changeStatus(id, this.checked ? 'active' : 'inactive');
+        await changeStatus(id, this.checked ? 'inactive' : 'active');
         showToast('Status updated');
-        loadTasks();
+        loadTasks(); // Reload all tasks to reflect change
       } catch {
-        this.checked = !this.checked;
-        showToast('Failed to update');
+        this.checked = !this.checked; // Revert on failure
+        showToast('Failed to update status');
       }
     });
 
-    // ✅ Edit button
-    $item.find('.btn-edit').on('click', async function(){
+    // Edit button
+    $item.find('.btn-edit').on('click', async function() {
       const newTitle = prompt("New title:", t[FIELD.title]);
-      if (newTitle !== null) {
-        await updateTask(id, { [FIELD.title]: newTitle, [FIELD.description]: t[FIELD.description] });
+      const newDesc = prompt("New description:", t[FIELD.description]);
+      if (newTitle !== null && newDesc !== null) {
+        await updateTask(id, { [FIELD.title]: newTitle, [FIELD.description]: newDesc });
         showToast("Task updated");
         loadTasks();
       }
     });
 
-    // ✅ Delete button
-    $item.find('.btn-del').on('click', async function(){
+    // Delete button
+    $item.find('.btn-del').on('click', async function() {
       if (confirm('Delete this task?')) {
         await deleteTask(id);
         showToast('Task deleted');
@@ -215,269 +207,197 @@ function render(){
       }
     });
 
-    console.log('Appending item to list:', $item[0]);
     $list.append($item);
   });
-  
-  console.log('Final #list contents:', $('#list')[0]);
 }
 
 
-async function loadTasks(){
+// ✅ REWRITTEN to load ALL tasks for better filtering
+async function loadTasks() {
   $('#btnRefresh').prop('disabled', true);
   try {
     const userId = localStorage.getItem('user_id');
-    console.log('Loading tasks for user_id:', userId);
-    
-    // Based on the API testing, load with status and user_id parameters
-    const res = await apiCall('list', { query: { status: 'active', user_id: userId || 0 } }); 
-    console.log("Tasks API response:", res);
-    console.log("Response type:", typeof res);
+    if (!userId) return; // Don't load if not logged in
 
-    // Handle the response - it should now be parsed JSON
-    if (res && res.data) {
-      if (Array.isArray(res.data)) {
-        ALL_TASKS = res.data;
-      } else if (typeof res.data === 'object') {
-        ALL_TASKS = Object.values(res.data);
-      } else {
-        ALL_TASKS = [];
-      }
-    } else if (Array.isArray(res)) {
-      ALL_TASKS = res;
-    } else {
-      ALL_TASKS = [];
-    }
+    // Fetch both active and inactive tasks to build the full list
+    const activePromise = apiCall('list', { query: { status: 'active', user_id: userId } });
+    const inactivePromise = apiCall('list', { query: { status: 'inactive', user_id: userId } });
 
-    console.log("ALL_TASKS after processing:", ALL_TASKS);
-    console.log("Number of tasks loaded:", ALL_TASKS.length);
-    
-    // Log first task structure if available
-    if (ALL_TASKS.length > 0) {
-      console.log("First task structure:", ALL_TASKS[0]);
-      console.log("Task field mapping check:", {
-        id: ALL_TASKS[0][FIELD.id],
-        title: ALL_TASKS[0][FIELD.title], 
-        description: ALL_TASKS[0][FIELD.description],
-        status: ALL_TASKS[0][FIELD.isActive]
-      });
-    }
-    
+    const [activeRes, inactiveRes] = await Promise.all([activePromise, inactivePromise]);
+
+    const activeTasks = (activeRes && activeRes.data) ? Object.values(activeRes.data) : [];
+    const inactiveTasks = (inactiveRes && inactiveRes.data) ? Object.values(inactiveRes.data) : [];
+
+    ALL_TASKS = [...activeTasks, ...inactiveTasks];
     render();
+
   } catch (err) {
     console.error("Load tasks failed", err);
-    console.error("Error details:", err.responseText || err.message);
     showToast('Failed to load tasks');
   } finally {
     $('#btnRefresh').prop('disabled', false);
   }
 }
 
-
-function addTask(){
+function addTask() {
   const title = $('#newTitle').val().trim();
   const description = $('#newDesc').val().trim();
-  if(!title) return showToast('Enter a title');
-  const $btn = $('#btnAdd'); setLoading($btn,true);
-  
-  const userId = localStorage.getItem('user_id') || 0; // Use 0 as fallback
-  console.log('Adding task with user_id:', userId);
-  
-  apiCall('create', { 
-    body: { 
-      [FIELD.title]: title, 
+  if (!title) return showToast('Enter a title');
+  const $btn = $('#btnAdd');
+  setLoading($btn, true);
+
+  const userId = localStorage.getItem('user_id');
+
+  apiCall('create', {
+    body: {
+      [FIELD.title]: title,
       [FIELD.description]: description,
-      user_id: userId
-    } 
+      user_id: parseInt(userId) // API expects an integer
+    }
   })
-    .then((res) => { 
-      console.log('Add task response:', res);
-      $('#newTitle').val(''); 
-      $('#newDesc').val(''); 
-      loadTasks(); 
-      showToast('Task added'); 
+    .then(() => {
+      $('#newTitle').val('');
+      $('#newDesc').val('');
+      loadTasks();
+      showToast('Task added');
     })
-    .catch((err) => {
-      console.error('Add task error:', err);
-      showToast('Failed to add');
-    })
-    .always(() => setLoading($btn,false));
+    .catch(() => showToast('Failed to add task'))
+    .always(() => setLoading($btn, false));
 }
 
-
-function updateTask(id, partial){ 
-  const userId = localStorage.getItem('user_id');
-  return apiCall('update', { 
-    body: { 
+function updateTask(id, data) {
+  // API needs item_name, item_description, and item_id
+  return apiCall('update', {
+    body: {
       [FIELD.id]: id,
-      user_id: userId,
-      ...partial 
-    } 
-  }); 
+      [FIELD.title]: data[FIELD.title],
+      [FIELD.description]: data[FIELD.description]
+    }
+  });
 }
 
-function changeStatus(id, status){ 
-  const userId = localStorage.getItem('user_id');
-  return apiCall('status', { 
-    body: { 
+function changeStatus(id, status) {
+  return apiCall('status', {
+    body: {
       [FIELD.id]: id,
-      [FIELD.isActive]: status, // "active" or "inactive"
-      user_id: userId
-    } 
-  }); 
+      [FIELD.isActive]: status // 'active' or 'inactive'
+    }
+  });
 }
 
-function deleteTask(id){ 
-  const userId = localStorage.getItem('user_id');
-  return apiCall('remove', { 
-    body: { 
-      [FIELD.id]: id,
-      user_id: userId
-    } 
-  }); 
+// ✅ UPDATED to send data as a query parameter
+function deleteTask(id) {
+  return apiCall('remove', {
+    query: {
+      [FIELD.id]: id
+    }
+  });
 }
 
 /******************** DOM + EVENTS ************************/
-function escapeHtml(s){ return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[m])); }
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', '\'': '&#39;' }[m]));
+}
 
-$('.tab').on('click', function(){
-  $('.tab').removeClass('active'); $(this).addClass('active');
+$('.tab').on('click', function() {
+  $('.tab').removeClass('active');
+  $(this).addClass('active');
   const key = $(this).data('tab');
-  $('.tabpane').addClass('hidden'); $('#'+key).removeClass('hidden');
+  $('.tabpane').addClass('hidden');
+  $('#' + key).removeClass('hidden');
 });
 
-$('#btnSignIn').on('click', async function(){
+// ✅ REWRITTEN to use GET with query params
+$('#btnSignIn').on('click', async function() {
   const email = $('#siEmail').val().trim();
   const password = $('#siPass').val().trim();
-  if(!email || !password) return showToast('Enter email & password');
-  const $btn = $(this); setLoading($btn,true);
-  try{
-    const res = await apiCall('signin', { body: { [FIELD.email]: email, [FIELD.password]: password } });
-    console.log('Signin response:', res);
-    
-    const token = res.token || res.data?.token || 'mock_' + Date.now();
-    const user = res.user || res.data?.user || res.data || { [FIELD.email]: email };
-    
-    // Make sure we extract user_id from the response
-    if (res.data?.user_id) {
-      user.user_id = res.data.user_id;
-    } else if (res.user_id) {
-      user.user_id = res.user_id;
-    } else if (res.id) {
-      user.user_id = res.id;
+  if (!email || !password) return showToast('Enter email & password');
+
+  const $btn = $(this);
+  setLoading($btn, true);
+
+  try {
+    // ✅ SIMPLIFIED: Just send the data. apiCall knows it's a GET.
+    const res = await apiCall('signin', {
+      query: { [FIELD.email]: email, [FIELD.password]: password }
+    });
+
+    if (res.status === 200 && res.data) {
+      onSignedIn(res.data);
+      showToast('Signed in ✓');
     } else {
-      // FALLBACK: Since API doesn't return user_id, use a simple approach
-      // This is a temporary fix - in a real app, the API should return the user_id
-      user.user_id = 0; // Based on the API response, it seems tasks are stored with user_id: 0
+      showToast(res.message || 'Sign in failed');
     }
-    
-    console.log('User object for signin:', user);
-    onSignedIn(user, token);
-    showToast('Signed in ✓');
-  }catch(err){ 
-    console.error('Signin error:', err); 
-    showToast('Sign in failed'); 
+  } catch (err) {
+    // The .fail() handler in apiCall will already log details.
+    showToast('Sign in failed (server error)');
+  } finally {
+    setLoading($btn, false);
   }
-  finally{ setLoading($btn,false); }
 });
 
-$('#btnSignUp').on('click', async function(){
+$('#btnSignUp').on('click', async function() {
   const firstName = $('#suFirstName').val().trim();
   const lastName = $('#suLastName').val().trim();
   const email = $('#suEmail').val().trim();
   const password = $('#suPass').val().trim();
   const confirmPassword = $('#suConfirmPass').val().trim();
-  if(!firstName || !lastName || !email || !password || !confirmPassword) return showToast('Fill all fields');
-  if(password !== confirmPassword) return showToast('Passwords do not match');
-  const $btn = $(this); setLoading($btn,true);
-  try{
-    const res = await apiCall('signup', { body: { 
-      [FIELD.firstName]: firstName, [FIELD.lastName]: lastName,
-      [FIELD.email]: email, [FIELD.password]: password, [FIELD.confirmPassword]: confirmPassword
-    }});
-    showToast('Account created — please sign in');
-    $('#siEmail').val(email); $('.tab[data-tab="signin"]').click();
-  }catch{ showToast('Sign up failed'); }
-  finally{ setLoading($btn,false); }
+
+  if (!firstName || !lastName || !email || !password || !confirmPassword)
+    return showToast('Fill all fields');
+  if (password !== confirmPassword)
+    return showToast('Passwords do not match');
+
+  const $btn = $(this);
+  setLoading($btn, true);
+
+  try {
+    // ✅ SIMPLIFIED: Just send the data. apiCall knows it's a POST.
+    const res = await apiCall('signup', {
+      body: {
+        [FIELD.firstName]: firstName,
+        [FIELD.lastName]: lastName,
+        [FIELD.email]: email,
+        [FIELD.password]: password,
+        [FIELD.confirmPassword]: confirmPassword
+      }
+    });
+
+    if (res.status === 200) {
+      showToast('Account created — please sign in');
+      $('#siEmail').val(email);
+      $('.tab[data-tab="signin"]').click();
+    } else {
+      showToast(res.message || 'Sign up failed');
+    }
+  } catch (err) {
+    // The .fail() handler in apiCall will already log details.
+    showToast('Sign up failed (server error)');
+  } finally {
+    setLoading($btn, false);
+  }
 });
 
 $('#btnSignOut').on('click', signOut);
 $('#btnAdd').on('click', addTask);
 $('#btnRefresh').on('click', loadTasks);
-$('.pill').on('click', function(){ $('.pill').removeClass('active'); $(this).addClass('active'); CURRENT_FILTER = $(this).data('filter'); render(); });
+$('.pill').on('click', function() {
+  $('.pill').removeClass('active');
+  $(this).addClass('active');
+  CURRENT_FILTER = $(this).data('filter');
+  render();
+});
 $('#search').on('input', render);
 
 // Auto-login
-(function init(){
-  const token = localStorage.getItem('token');
+(function init() {
+  const userId = localStorage.getItem('user_id');
   const who = localStorage.getItem('who');
-  if(token){ $('#whoami').text(who||''); $('#authPanel').addClass('hidden'); $('#appPanel').removeClass('hidden'); $('#btnSignOut').removeClass('hidden'); loadTasks(); }
+  if (userId && who) {
+    $('#whoami').text(who);
+    $('#authPanel').addClass('hidden');
+    $('#appPanel').removeClass('hidden');
+    $('#btnSignOut').removeClass('hidden');
+    loadTasks();
+  }
 })();
-
-// DEBUG FUNCTIONS - Add these temporarily
-window.debugTasks = function() {
-  console.log('=== TASK DEBUG INFO ===');
-  console.log('ALL_TASKS:', ALL_TASKS);
-  console.log('ALL_TASKS length:', ALL_TASKS.length);
-  console.log('CURRENT_FILTER:', CURRENT_FILTER);
-  console.log('user_id in localStorage:', localStorage.getItem('user_id'));
-  console.log('token in localStorage:', localStorage.getItem('token'));
-  console.log('#list element:', $('#list')[0]);
-  console.log('#empty element visible:', !$('#empty').hasClass('hidden'));
-  
-  // Force render without filters
-  console.log('Attempting to force render all tasks...');
-  const $list = $('#list').empty();
-  ALL_TASKS.forEach((task, index) => {
-    console.log(`Task ${index}:`, task);
-    const $testItem = $(`<div class="task">Task ${index}: ${task[FIELD.title] || 'No Title'}</div>`);
-    $list.append($testItem);
-  });
-};
-
-window.testAddTask = function() {
-  console.log('=== TESTING ADD TASK ===');
-  const userId = localStorage.getItem('user_id');
-  console.log('Using user_id:', userId);
-  
-  const testData = {
-    [FIELD.title]: 'Test Task ' + Date.now(),
-    [FIELD.description]: 'Test Description',
-    user_id: userId
-  };
-  
-  console.log('Sending data:', testData);
-  
-  return apiCall('create', { body: testData })
-    .then(res => {
-      console.log('✅ Add task success:', res);
-      return loadTasks();
-    })
-    .catch(err => {
-      console.error('❌ Add task failed:', err);
-    });
-};
-
-window.testLoadTasks = function() {
-  console.log('=== TESTING LOAD TASKS ===');
-  const userId = localStorage.getItem('user_id');
-  console.log('Current user_id:', userId);
-  
-  // Test loading tasks with different queries
-  console.log('Testing load with just user_id...');
-  return apiCall('list', { query: { user_id: userId } })
-    .then(res => {
-      console.log('✅ Load tasks (user_id only):', res);
-      return apiCall('list', { query: { status: 'active', user_id: userId } });
-    })
-    .then(res => {
-      console.log('✅ Load tasks (active + user_id):', res);
-      return apiCall('list', { query: {} }); // Try with no filters
-    })
-    .then(res => {
-      console.log('✅ Load tasks (no filters):', res);
-    })
-    .catch(err => {
-      console.error('❌ Load tasks failed:', err);
-    });
-};
