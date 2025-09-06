@@ -22,35 +22,36 @@
     </div>
 
     <!-- Auth Panel -->
-    <div id="authPanel" class="grid grid-2" style="width:100%"></div>
-      <div class="panel">
+    <div id="authPanel" class="panel" style="width:100%; display:flex; flex-direction:column; gap:16px;">
+      <div>
         <h2 class="title">Welcome 👋</h2>
         <p class="muted">Sign in or create an account to manage your tasks</p>
       </div>
-        <div style="height:10px"></div>
-        <div style="height:10px"></div>
-        <div class="tabs">
-          <div class="tab active" data-tab="signin">Sign In</div>
-          <div class="tab" data-tab="signup">Sign Up</div>
-        </div>
-        <div id="signin" class="tabpane" style="margin-top:12px">
-          <div class="grid">
-            <div class="field"><label>Email</label><input id="siEmail" class="input" type="email" placeholder="you@example.com"></div>
-            <div class="field"><label>Password</label><input id="siPass" class="input" type="password" placeholder="••••••••"></div>
-            <button id="btnSignIn" class="btn btn-primary">Sign In</button>
-          </div>
-        </div>
-        <div id="signup" class="tabpane hidden" style="margin-top:12px">
-          <div class="grid">
-            <div class="field"><label>First Name</label><input id="suFirstName" class="input" type="text" placeholder="Your first name"></div>
-            <div class="field"><label>Last Name</label><input id="suLastName" class="input" type="text" placeholder="Your last name"></div>
-            <div class="field"><label>Email</label><input id="suEmail" class="input" type="email" placeholder="you@example.com"></div>
-            <div class="field"><label>Password</label><input id="suPass" class="input" type="password" placeholder="Create a password"></div>
-            <div class="field"><label>Confirm Password</label><input id="suConfirmPass" class="input" type="password" placeholder="Confirm your password"></div>
-            <button id="btnSignUp" class="btn btn-primary">Create Account</button>
-          </div>
+      
+      <div class="tabs" style="display:flex; gap:8px; width:100%; padding:0 24px;">
+        <div class="tab active" data-tab="signin">Sign In</div>
+        <div class="tab" data-tab="signup">Sign Up</div>
+      </div>
+      
+      <div id="signin" class="tabpane" style="margin-top:12px;">
+        <div class="grid">
+          <div class="field"><label>Email</label><input id="siEmail" class="input" type="email" placeholder="you@example.com"></div>
+          <div class="field"><label>Password</label><input id="siPass" class="input" type="password" placeholder="••••••••"></div>
+          <button id="btnSignIn" class="btn btn-primary">Sign In</button>
         </div>
       </div>
+      
+      <div id="signup" class="tabpane hidden" style="margin-top:12px;">
+        <div class="grid">
+          <div class="field"><label>First Name</label><input id="suFirstName" class="input" type="text" placeholder="Your first name"></div>
+          <div class="field"><label>Last Name</label><input id="suLastName" class="input" type="text" placeholder="Your last name"></div>
+          <div class="field"><label>Email</label><input id="suEmail" class="input" type="email" placeholder="you@example.com"></div>
+          <div class="field"><label>Password</label><input id="suPass" class="input" type="password" placeholder="Create a password"></div>
+          <div class="field"><label>Confirm Password</label><input id="suConfirmPass" class="input" type="password" placeholder="Confirm your password"></div>
+          <button id="btnSignUp" class="btn btn-primary">Create Account</button>
+        </div>
+      </div>
+    </div>
 
     <!-- App Panel -->
     <div id="appPanel" class="panel hidden">
