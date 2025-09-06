@@ -1,3 +1,41 @@
+// Modal HTML for delete confirmation (inserted once)
+
+function ensureDeleteModal() {
+  if ($('#deleteModal').length) return;
+  const modal = $(`
+    <div id="deleteModal" class="modal hidden">
+      <div class="modal-content">
+        <h3 class="title">Delete Task</h3>
+        <div class="muted" style="margin-bottom:18px">Are you sure you want to delete this task?</div>
+        <div class="row" style="margin-top:16px; gap:10px; justify-content:flex-end">
+          <button id="deleteCancel" class="btn btn-ghost">Cancel</button>
+          <button id="deleteConfirm" class="btn btn-danger">Delete</button>
+        </div>
+      </div>
+    </div>
+  `);
+  $('body').append(modal);
+  // Modal close logic
+  $('#deleteCancel').on('click', hideDeleteModal);
+  $('#deleteModal').on('click', function(e) {
+    if (e.target === this) hideDeleteModal();
+  });
+}
+
+function showDeleteModal(onConfirm) {
+  ensureDeleteModal();
+  $('#deleteModal').removeClass('hidden');
+  // Remove previous handler
+  $('#deleteConfirm').off('click');
+  $('#deleteConfirm').on('click', function() {
+    hideDeleteModal();
+    onConfirm();
+  });
+}
+
+function hideDeleteModal() {
+  $('#deleteModal').addClass('hidden');
+}
 /******************** API CONFIG ************************/
 const API_BASE = "https://todo-list.dcism.org";
 
@@ -242,12 +280,12 @@ function render() {
     });
 
     // Delete button
-    $item.find('.btn-del').on('click', async function() {
-      if (confirm('Delete this task?')) {
+    $item.find('.btn-del').on('click', function() {
+      showDeleteModal(async () => {
         await deleteTask(id);
         showToast('Task deleted');
         loadTasks();
-      }
+      });
     });
 
     $list.append($item);
